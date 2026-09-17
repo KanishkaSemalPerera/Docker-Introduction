@@ -474,13 +474,40 @@ Additional official resources:
 
 This repo includes a small real-world test case to try out everything above: a minimal **Vite + React** app, containerized with Docker.
 
-**1. Scaffold the app** (already done in this repo):
+### Step 1: Get a React project
+
+Either create a brand new one with Vite:
 
 ```bash
-npm create vite@latest . -- --template react
+npm create vite@latest
 ```
 
-**2. The Dockerfile** used here runs the Vite dev server inside a container:
+Or clone an existing React app (this is the one used in this example):
+
+```bash
+git clone https://github.com/udarakalpana/test-app1.git
+```
+
+Open the project folder in your favorite IDE or text editor, open a terminal in it, then install dependencies:
+
+```bash
+npm i
+```
+
+At this point you can run it normally (`npm run dev`) and view it in the browser — but it isn't dockerized yet.
+
+### Step 2: Create the Dockerfile
+
+To containerize the app, two files are needed in the app root: `Dockerfile` and `.dockerignore`.
+
+Create the `Dockerfile` (it's good practice to create/edit it with a CLI text editor like `nano`, to avoid syntax issues from other editors):
+
+```bash
+touch Dockerfile
+nano Dockerfile
+```
+
+Add this configuration:
 
 ```dockerfile
 FROM node:20-alpine
@@ -500,27 +527,55 @@ CMD ["npm", "run", "dev", "--", "--host"]
 
 - `--host` is required so Vite binds to `0.0.0.0` instead of just `localhost` — otherwise the app is unreachable from outside the container.
 
-**3. Build the image:**
+Save and exit `nano`:
 
-```bash
-docker build -t docker-introduction .
+```
+CTRL + O   (write out / save)
+Enter      (confirm filename)
+CTRL + X   (exit)
 ```
 
-**4. Run the container**, publishing the dev server's port:
+### Step 3: Create the .dockerignore
 
 ```bash
-docker run -d --name test-app-1 -p 5173:5173 docker-introduction
+touch .dockerignore
+nano .dockerignore
 ```
 
-**5. Test it:** open http://localhost:5173 in your browser — you should see the app running.
+Add this configuration, so these files/folders are excluded from the build context:
+
+```
+node_modules
+dist
+.git
+Dockerfile
+```
+
+Save and exit the same way (`CTRL + O`, `Enter`, `CTRL + X`).
+
+### Step 4: Build the image
+
+```bash
+docker build -t test-app1 .
+```
+
+### Step 5: Run the container
+
+```bash
+docker run -d --name test-app1-container -p 5173:5173 test-app1
+```
+
+### Step 6: Test it
+
+Open http://localhost:5173 in your browser — you should see the app running.
 
 **Useful checks while testing:**
 
 ```bash
-docker ps                        # confirm the container is Up
-docker logs test-app-1           # see the Vite server output
-docker stop test-app-1           # stop it
-docker start test-app-1          # start it again
+docker ps                             # confirm the container is Up
+docker logs test-app1-container       # see the Vite server output
+docker stop test-app1-container       # stop it
+docker start test-app1-container      # start it again
 ```
 
-If `localhost:5173` refuses to connect, check `docker ps` first — the container may have stopped, in which case `docker start test-app-1` brings it back.
+If `localhost:5173` refuses to connect, check `docker ps` first — the container may have stopped, in which case `docker start test-app1-container` brings it back.
