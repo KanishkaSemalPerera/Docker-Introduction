@@ -579,3 +579,40 @@ docker start test-app1-container      # start it again
 ```
 
 If `localhost:5173` refuses to connect, check `docker ps` first — the container may have stopped, in which case `docker start test-app1-container` brings it back.
+
+### Step 7: Push the image to Docker Hub
+
+Once the image builds and runs correctly, you can publish it to [Docker Hub](https://hub.docker.com/) so it can be pulled and run anywhere.
+
+**Option A — using the CLI:**
+
+```bash
+docker login
+```
+
+Tag the image with your Docker Hub username:
+
+```bash
+docker tag test-app1 <your-dockerhub-username>/test-app1:latest
+```
+
+Push it:
+
+```bash
+docker push <your-dockerhub-username>/test-app1:latest
+```
+
+**Option B — using Docker Desktop:**
+
+1. Open **Docker Desktop** and go to the **Images** tab.
+2. Find `test-app1` in the list of local images.
+3. Click the **⋮** (more options) menu next to it and choose **Push to Hub**.
+4. If prompted, sign in to your Docker Hub account.
+5. Confirm the repository name (e.g. `<your-dockerhub-username>/test-app1`) and push.
+
+Once pushed, anyone can pull and run it:
+
+```bash
+docker pull <your-dockerhub-username>/test-app1:latest
+docker run -d --name test-app1-container -p 5173:5173 <your-dockerhub-username>/test-app1:latest
+```
