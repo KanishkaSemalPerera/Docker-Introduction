@@ -25,6 +25,7 @@ This guide follows the official Docker learning path. For the full official docs
      - [Sharing Local Files with Containers](#sharing-local-files-with-containers)
      - [Multi-Container Applications](#multi-container-applications)
 4. [Reference](#4-reference)
+5. [Hands-On Example: Dockerizing a Vite React App](#5-hands-on-example-dockerizing-a-vite-react-app)
 
 ---
 
@@ -466,3 +467,60 @@ Additional official resources:
 - Dockerfile reference: https://docs.docker.com/reference/dockerfile/
 - Docker Compose docs: https://docs.docker.com/compose/
 - Docker Hub (image registry): https://hub.docker.com/
+
+---
+
+## 5. Hands-On Example: Dockerizing a Vite React App
+
+This repo includes a small real-world test case to try out everything above: a minimal **Vite + React** app, containerized with Docker.
+
+**1. Scaffold the app** (already done in this repo):
+
+```bash
+npm create vite@latest . -- --template react
+```
+
+**2. The Dockerfile** used here runs the Vite dev server inside a container:
+
+```dockerfile
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+
+RUN npm install
+
+COPY . .
+
+EXPOSE 5173
+
+CMD ["npm", "run", "dev", "--", "--host"]
+```
+
+- `--host` is required so Vite binds to `0.0.0.0` instead of just `localhost` — otherwise the app is unreachable from outside the container.
+
+**3. Build the image:**
+
+```bash
+docker build -t docker-introduction .
+```
+
+**4. Run the container**, publishing the dev server's port:
+
+```bash
+docker run -d --name test-app-1 -p 5173:5173 docker-introduction
+```
+
+**5. Test it:** open http://localhost:5173 in your browser — you should see the app running.
+
+**Useful checks while testing:**
+
+```bash
+docker ps                        # confirm the container is Up
+docker logs test-app-1           # see the Vite server output
+docker stop test-app-1           # stop it
+docker start test-app-1          # start it again
+```
+
+If `localhost:5173` refuses to connect, check `docker ps` first — the container may have stopped, in which case `docker start test-app-1` brings it back.
