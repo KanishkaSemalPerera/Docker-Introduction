@@ -26,6 +26,15 @@ This guide follows the official Docker learning path. For the full official docs
      - [Multi-Container Applications](#multi-container-applications)
 4. [Reference](#4-reference)
 5. [Hands-On Example: Dockerizing a Vite React App](#5-hands-on-example-dockerizing-a-vite-react-app)
+6. [Running the Docker Container on an AWS EC2 Instance](#6-running-the-docker-container-on-an-aws-ec2-instance)
+   - [6.1 Launch the EC2 Instance](#61-launch-the-ec2-instance)
+   - [6.2 Configure the Security Group](#62-configure-the-security-group)
+   - [6.3 Connect to the Instance via SSH](#63-connect-to-the-instance-via-ssh)
+   - [6.4 Install Docker on EC2](#64-install-docker-on-ec2)
+   - [6.5 Get the Project onto the Instance](#65-get-the-project-onto-the-instance)
+   - [6.6 Build and Run the Container](#66-build-and-run-the-container)
+   - [6.7 Test It from the Browser](#67-test-it-from-the-browser)
+   - [6.8 Cleaning Up](#68-cleaning-up)
 
 ---
 
@@ -616,3 +625,166 @@ Once pushed, anyone can pull and run it:
 docker pull <your-dockerhub-username>/test-app1:latest
 docker run -d --name test-app1-container -p 5173:5173 <your-dockerhub-username>/test-app1:latest
 ```
+
+---
+
+## 6. Running the Docker Container on an AWS EC2 Instance
+
+This section covers the full A–Z process of taking the image built earlier (either the local `test-app1` image or the one pushed to Docker Hub) and running it on a real cloud server using **AWS EC2**.
+
+```mermaid
+flowchart LR
+    Dev["💻 Your Computer<br/>(build/push image)"] --> Hub["☁️ Docker Hub<br/>(image registry)"]
+    Hub --> EC2["🖥️ AWS EC2 Instance<br/>(docker pull + docker run)"]
+    Browser["🌐 Your Browser"] -->|"http://<EC2-Public-IP>:5173"| EC2
+```
+
+### 6.1 Launch the EC2 Instance
+
+1. Log in to the **AWS Console** → go to **EC2** → **Launch Instance**.
+2. **Name**: e.g. `docker-test-app1`.
+3. **AMI (OS image)**: choose **Ubuntu Server 22.04 LTS** (Free Tier eligible).
+4. **Instance type**: `t2.micro` (Free Tier eligible).
+5. **Key pair**: create a new key pair (e.g. `docker-app-key.pem`) and download it — this is required to SSH in later. Keep this file safe; it can't be re-downloaded.
+6. **Network settings**: leave default VPC/subnet, but security group rules are configured in the next step.
+7. **Storage**: default 8 GB is enough for this test app.
+8. Click **Launch Instance**.
+
+### 6.2 Configure the Security Group
+
+By default, an EC2 instance is locked down. You need to open the ports required to SSH in and to reach the app.
+
+| Type | Protocol | Port Range | Source | Purpose |
+|------|----------|------------|--------|---------|
+| SSH | TCP | 22 | My IP (recommended) | Connect to the instance remotely |
+| Custom TCP | TCP | 5173 | Anywhere (0.0.0.0/0) | Reach the Vite app in the browser |
+
+```mermaid
+flowchart LR
+    You["🧑 You"] -->|"port 22 (SSH)"| SG["🔒 EC2 Security Group"]
+    Browser["🌐 Anyone's Browser"] -->|"port 5173 (App)"| SG
+    SG --> EC2["🖥️ EC2 Instance"]
+```
+
+> ⚠️ Restricting SSH (port 22) to "My IP" is safer than "Anywhere" — it stops random bots on the internet from even attempting to log in.
+
+### 6.3 Connect to the Instance via SSH
+
+From your local machine, in the folder where the `.pem` key was downloaded:
+
+```bash
+chmod 400 docker-app-key.pem
+ssh -i docker-app-key.pem ubuntu@<EC2-Public-IP>
+```
+
+- `<EC2-Public-IP>` is shown on the instance's details page in the AWS Console.
+- `ubuntu` is the default user for Ubuntu AMIs.
+
+### 6.4 Install Docker on EC2
+
+Once connected via SSH, install Docker on the fresh Ubuntu instance:
+
+```bash
+sudo apt update
+sudo apt install -y docker.io
+sudo systemctl enable --now docker
+```
+
+Allow running `docker` without `sudo` every time (optional, but convenient):
+
+```bash
+sudo usermod -aG docker $USER
+```
+
+Log out and reconnect (`exit`, then SSH in again) for the group change to apply, then confirm:
+
+```bash
+docker --version
+docker ps
+```
+
+### 6.5 Get the Project onto the Instance
+
+There are two ways to get the app + Dockerfile onto the EC2 instance:
+
+**Option A — Clone from GitHub (build on EC2):**
+
+```bash
+git clone https://github.com/KanishkaSemalPerera/Docker-Introduction.git
+cd Docker-Introduction
+```
+
+**Option B — Pull the pre-built image from Docker Hub (no build needed):**
+
+```bash
+docker pull <your-dockerhub-username>/test-app1:latest
+```
+
+Option B is faster since the image is already built — it skips `npm install` entirely on the server.
+
+### 6.6 Build and Run the Container
+
+**If you cloned the repo (Option A),** build the image on the instance:
+
+```bash
+docker build -t test-app1 .
+```
+
+**Either way**, run the container the same way as on your local machine:
+
+```bash
+docker run -d --name test-app1-container -p 5173:5173 test-app1
+```
+
+(If you pulled from Docker Hub instead, use `<your-dockerhub-username>/test-app1:latest` as the image name.)
+
+Confirm it's up and the port is published:
+
+```bash
+docker ps
+```
+
+```mermaid
+sequenceDiagram
+    participant You as You (SSH)
+    participant EC2 as EC2 Instance
+    participant Hub as Docker Hub
+
+    You->>EC2: git clone / docker pull
+    alt Building from source
+        You->>EC2: docker build -t test-app1 .
+    end
+    You->>EC2: docker run -d -p 5173:5173 test-app1
+    EC2-->>You: Container Up ✅
+```
+
+### 6.7 Test It from the Browser
+
+Open in your browser:
+
+```
+http://<EC2-Public-IP>:5173
+```
+
+You should see the same "Hello Docker I'm Kanishka" app that ran locally — now served from the cloud.
+
+**If it doesn't load, check:**
+
+| Problem | Likely Cause |
+|---------|--------------|
+| Connection times out | Security group is missing the port 5173 inbound rule (see [6.2](#62-configure-the-security-group)) |
+| Connection refused | Container isn't running, or wasn't started with `-p 5173:5173` — check with `docker ps` |
+| SSH fails to connect | Wrong key file, wrong username, or port 22 not open for your IP |
+
+### 6.8 Cleaning Up
+
+To avoid ongoing AWS charges once you're done testing:
+
+```bash
+docker stop test-app1-container
+docker rm test-app1-container
+```
+
+Then, in the AWS Console: **EC2 → Instances → select instance → Instance State → Terminate**.
+
+> 💡 Free Tier only covers `t2.micro` for a limited number of hours per month — terminate instances you're not using to avoid surprise charges.
